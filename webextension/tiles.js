@@ -1,8 +1,61 @@
+var db;
+
+function initDB() {
+	return new Promise(function(resolve, reject) {
+		let request = indexedDB.open('newTabTools', 8);
+
+		request.onsuccess = function(/*event*/) {
+			// console.log(event.type, event);
+			db = this.result;
+			resolve();
+		};
+
+		request.onerror = function(event) {
+			reject(event);
+		};
+
+		request.onupgradeneeded = function(/*event*/) {
+			// console.log(event.type, event);
+			db = this.result;
+
+			if (!db.objectStoreNames.contains('tiles')) {
+				db.createObjectStore('tiles', { autoIncrement: true, keyPath: 'id' });
+			}
+
+			if (!db.objectStoreNames.contains('background')) {
+				db.createObjectStore('background', { autoIncrement: true });
+			}
+
+			if (!db.objectStoreNames.contains('thumbnails')) {
+				db.createObjectStore('thumbnails', { keyPath: 'url' });
+			}
+			if (!this.transaction.objectStore('thumbnails').indexNames.contains('used')) {
+				this.transaction.objectStore('thumbnails').createIndex('used', 'used');
+			}
+		};
+	});
+}
+
+function waitForDB() {
+	return new Promise(function(resolve) {
+		if (db) {
+			resolve();
+			return;
+		}
+
+		initDB.waitingQueue = initDB.waitingQueue || [];
+		initDB.waitingQueue.push(resolve);
+	});
+}
+
 /* exported initDB, Tiles, Background */
 /* globals Blocked, Filters, Prefs, chrome, db */
 var Tiles = {
 	_cache: [],
 	_list: [],
+	isPinned: function(url) {
+		return this._list.includes(url);
+	},
 	getAllTiles: function() {
 		let count = Prefs.rows * Prefs.columns;
 		return new Promise(function(resolve) {
@@ -26,7 +79,8 @@ var Tiles = {
 					return;
 				}
 
-				chrome.topSites.get({ providers: ['places'] }, r => {
+				// chrome.topSites.get({ providers: ['places'] }, r => {
+				chrome.topSites.get(r => {
 					let urls = Tiles._list.slice();
 					let filters = Filters.getList();
 					let dotFilters = Object.keys(filters).filter(f => f[0] == '.');
